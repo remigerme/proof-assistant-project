@@ -1,3 +1,5 @@
 _build
 report/report.pdf
 *~
+*.cmi
+*.cmo
