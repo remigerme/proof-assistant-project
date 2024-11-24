@@ -17,3 +17,9 @@ or
 ```bash
 dune build
 ```
+
+You might need to first execute
+
+```bash
+eval $(opam config env)
+```
