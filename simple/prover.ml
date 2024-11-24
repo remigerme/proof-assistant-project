@@ -7,28 +7,37 @@ type tvar = string
 type var = string
 
 (* Types *)
-type ty = TTrue | TVar of tvar | TAbs of ty * ty | TProd of ty * ty
+type ty =
+  | TUnit
+  | TVar of tvar
+  | TAbs of ty * ty
+  | TProd of ty * ty
+  | TCoprod of ty * ty
 
 (* Terms *)
 type tm =
-  | True
+  | Unit
   | Var of var
   | App of tm * tm
   | Abs of var * ty * tm
   | Prod of tm * tm
   | Fst of tm
   | Snd of tm
+  | Coprod of tm * var * tm * var * tm
+  | Left of tm * ty
+  | Right of tm * ty
 
 let rec string_of_ty t =
   match t with
-  | TTrue -> "True"
+  | TUnit -> "unit"
   | TVar x -> x
   | TAbs (u, v) -> "(" ^ string_of_ty u ^ " => " ^ string_of_ty v ^ ")"
   | TProd (u, v) -> "(" ^ string_of_ty u ^ " /\\ " ^ string_of_ty v ^ ")"
+  | TCoprod (u, v) -> "(" ^ string_of_ty u ^ " \\/ " ^ string_of_ty v ^ ")"
 
 let rec string_of_tm t =
   match t with
-  | True -> "true"
+  | Unit -> "()"
   | Var x -> x
   | App (u, v) -> string_of_tm u ^ " " ^ string_of_tm v
   | Abs (x, tx, u) ->
@@ -36,6 +45,11 @@ let rec string_of_tm t =
   | Prod (u, v) -> "(" ^ string_of_tm u ^ ", " ^ string_of_tm v ^ ")"
   | Fst u -> "fst (" ^ string_of_tm u ^ ")"
   | Snd u -> "snd (" ^ string_of_tm u ^ ")"
+  | Coprod (t, x, u, y, v) ->
+      "case (" ^ string_of_tm t ^ ", " ^ x ^ " => " ^ string_of_tm u ^ ", " ^ y
+      ^ " => " ^ string_of_tm v ^ ")"
+  | Left (a, tb) -> "left^(" ^ string_of_ty tb ^ ") (" ^ string_of_tm a ^ ")"
+  | Right (b, ta) -> "right^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm b ^ ")"
 
 type context = (var * ty) list
 
@@ -43,7 +57,7 @@ exception Type_error
 
 let rec infer_type gamma t =
   match t with
-  | True -> TTrue
+  | Unit -> TUnit
   | Var x -> ( try List.assoc x gamma with Not_found -> raise Type_error)
   | App (u, v) -> (
       match infer_type gamma u with
@@ -61,6 +75,15 @@ let rec infer_type gamma t =
       match infer_type gamma u with
       | TProd (_, tu) -> tu
       | _ -> raise Type_error)
+  | Coprod (t, x, u, y, v) -> (
+      match infer_type gamma t with
+      | TCoprod (ta, tb) ->
+          let tu = infer_type ((x, ta) :: gamma) u in
+          let tv = infer_type ((y, tb) :: gamma) v in
+          if tu = tv then tu else raise Type_error
+      | _ -> raise Type_error)
+  | Left (a, tb) -> TCoprod (infer_type gamma a, tb)
+  | Right (b, ta) -> TCoprod (ta, infer_type gamma b)
 
 and check_type gamma t ty =
   match infer_type gamma t with tt when tt = ty -> () | _ -> raise Type_error
@@ -157,5 +180,19 @@ let () =
   print_endline (string_of_ty (infer_type [] and_comm))
 
 let () =
-  let eval = Abs ("f", TAbs (TTrue, TVar "A"), App (Var "f", True)) in
+  let eval = Abs ("f", TAbs (TUnit, TVar "A"), App (Var "f", Unit)) in
   print_endline (string_of_ty (infer_type [] eval))
+
+let () =
+  let or_comm =
+    Abs
+      ( "o",
+        TCoprod (TVar "A", TVar "B"),
+        Coprod
+          ( Var "o",
+            "x",
+            Right (Var "x", TVar "B"),
+            "y",
+            Left (Var "y", TVar "A") ) )
+  in
+  print_endline (string_of_ty (infer_type [] or_comm))
