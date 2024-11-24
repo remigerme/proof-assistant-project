@@ -17,19 +17,19 @@ let rec string_of_ty t =
 let rec string_of_tm t =
   match t with
   | Unit -> "()"
-  | Empty (u, ta) -> "case^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm u ^ ")"
+  | Empty (u, ta) -> "absurd(" ^ string_of_tm u ^ ", " ^ string_of_ty ta ^ ")"
   | Var x -> x
   | App (u, v) -> string_of_tm u ^ " " ^ string_of_tm v
   | Abs (x, tx, u) ->
       "(fun (" ^ x ^ " : " ^ string_of_ty tx ^ ") -> " ^ string_of_tm u ^ ")"
   | Prod (u, v) -> "(" ^ string_of_tm u ^ ", " ^ string_of_tm v ^ ")"
-  | Fst u -> "fst (" ^ string_of_tm u ^ ")"
-  | Snd u -> "snd (" ^ string_of_tm u ^ ")"
+  | Fst u -> "fst(" ^ string_of_tm u ^ ")"
+  | Snd u -> "snd(" ^ string_of_tm u ^ ")"
   | Coprod (t, x, u, y, v) ->
-      "case (" ^ string_of_tm t ^ ", " ^ x ^ " => " ^ string_of_tm u ^ ", " ^ y
-      ^ " => " ^ string_of_tm v ^ ")"
-  | Left (a, tb) -> "left^(" ^ string_of_ty tb ^ ") (" ^ string_of_tm a ^ ")"
-  | Right (ta, b) -> "right^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm b ^ ")"
+      "case " ^ string_of_tm t ^ " of " ^ x ^ " -> " ^ string_of_tm u ^ " | "
+      ^ y ^ " -> " ^ string_of_tm v
+  | Left (a, tb) -> "left(" ^ string_of_tm a ^ ", " ^ string_of_ty tb ^ ")"
+  | Right (ta, b) -> "right(" ^ string_of_ty ta ^ ", " ^ string_of_tm b ^ ")"
 
 type context = (var * ty) list
 
@@ -188,3 +188,49 @@ let () =
         Empty (App (Snd (Var "f"), Fst (Var "f")), TVar "B") )
   in
   print_endline (string_of_ty (infer_type [] non_contrad))
+
+(****************)
+(* PARSING TEST *)
+(****************)
+let () =
+  let l =
+    [
+      "A => B";
+      "A ⇒ B";
+      "A /\\ B";
+      "A ∧ B";
+      "T";
+      "A \\/ B";
+      "A ∨ B";
+      "_";
+      "not A";
+      "¬ A";
+    ]
+  in
+  List.iter
+    (fun s ->
+      Printf.printf "the parsing of \"%s\" is %s\n%!" s
+        (string_of_ty (ty_of_string s)))
+    l
+
+let () =
+  let l =
+    [
+      "t u v";
+      "fun (x : A) -> t";
+      "λ (x : A) → t";
+      "(t , u)";
+      "fst(t)";
+      "snd(t)";
+      "()";
+      "case t of x -> u | y -> v";
+      "left(t,B)";
+      "right(A,t)";
+      "absurd(t,A)";
+    ]
+  in
+  List.iter
+    (fun s ->
+      Printf.printf "the parsing of \"%s\" is %s\n%!" s
+        (string_of_tm (tm_of_string s)))
+    l
