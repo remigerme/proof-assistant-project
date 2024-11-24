@@ -7,10 +7,11 @@ type tvar = string
 type var = string
 
 (* Types *)
-type ty = TVar of tvar | TAbs of ty * ty | TProd of ty * ty
+type ty = TTrue | TVar of tvar | TAbs of ty * ty | TProd of ty * ty
 
 (* Terms *)
 type tm =
+  | True
   | Var of var
   | App of tm * tm
   | Abs of var * ty * tm
@@ -20,12 +21,14 @@ type tm =
 
 let rec string_of_ty t =
   match t with
+  | TTrue -> "True"
   | TVar x -> x
   | TAbs (u, v) -> "(" ^ string_of_ty u ^ " => " ^ string_of_ty v ^ ")"
   | TProd (u, v) -> "(" ^ string_of_ty u ^ " /\\ " ^ string_of_ty v ^ ")"
 
 let rec string_of_tm t =
   match t with
+  | True -> "true"
   | Var x -> x
   | App (u, v) -> string_of_tm u ^ " " ^ string_of_tm v
   | Abs (x, tx, u) ->
@@ -40,6 +43,7 @@ exception Type_error
 
 let rec infer_type gamma t =
   match t with
+  | True -> TTrue
   | Var x -> ( try List.assoc x gamma with Not_found -> raise Type_error)
   | App (u, v) -> (
       match infer_type gamma u with
@@ -141,3 +145,17 @@ let () =
     let _ = check_type [] (Var "x") (TVar "A") in
     assert false
   with Type_error -> ()
+
+(*************)
+(* WITNESSES *)
+(*************)
+
+let () =
+  let and_comm =
+    Abs ("p", TProd (TVar "A", TVar "B"), Prod (Snd (Var "p"), Fst (Var "p")))
+  in
+  print_endline (string_of_ty (infer_type [] and_comm))
+
+let () =
+  let eval = Abs ("f", TAbs (TTrue, TVar "A"), App (Var "f", True)) in
+  print_endline (string_of_ty (infer_type [] eval))
