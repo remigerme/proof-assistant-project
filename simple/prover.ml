@@ -35,45 +35,52 @@ type context = (var * ty) list
 
 exception Type_error
 
-let rec infer_type gamma t =
+let rec infer_type ctx t =
   match t with
   | Unit -> TUnit
   | Empty (u, ta) ->
-      check_type gamma u TEmpty;
+      check_type ctx u TEmpty;
       ta
-  | Var x -> ( try List.assoc x gamma with Not_found -> raise Type_error)
+  | Var x -> ( try List.assoc x ctx with Not_found -> raise Type_error)
   | App (u, v) -> (
-      match infer_type gamma u with
+      match infer_type ctx u with
       | TAbs (tu, turet) ->
-          check_type gamma v tu;
+          check_type ctx v tu;
           turet
       | _ -> raise Type_error)
-  | Abs (x, tx, u) -> TAbs (tx, infer_type ((x, tx) :: gamma) u)
-  | Prod (u, v) -> TProd (infer_type gamma u, infer_type gamma v)
+  | Abs (x, tx, u) -> TAbs (tx, infer_type ((x, tx) :: ctx) u)
+  | Prod (u, v) -> TProd (infer_type ctx u, infer_type ctx v)
   | Fst u -> (
-      match infer_type gamma u with
-      | TProd (tu, _) -> tu
-      | _ -> raise Type_error)
+      match infer_type ctx u with TProd (tu, _) -> tu | _ -> raise Type_error)
   | Snd u -> (
-      match infer_type gamma u with
-      | TProd (_, tu) -> tu
-      | _ -> raise Type_error)
+      match infer_type ctx u with TProd (_, tu) -> tu | _ -> raise Type_error)
   | Coprod (t, x, u, y, v) -> (
-      match infer_type gamma t with
+      match infer_type ctx t with
       | TCoprod (ta, tb) ->
-          let tu = infer_type ((x, ta) :: gamma) u in
-          let tv = infer_type ((y, tb) :: gamma) v in
+          let tu = infer_type ((x, ta) :: ctx) u in
+          let tv = infer_type ((y, tb) :: ctx) v in
           if tu = tv then tu else raise Type_error
       | _ -> raise Type_error)
-  | Left (a, tb) -> TCoprod (infer_type gamma a, tb)
-  | Right (ta, b) -> TCoprod (ta, infer_type gamma b)
+  | Left (a, tb) -> TCoprod (infer_type ctx a, tb)
+  | Right (ta, b) -> TCoprod (ta, infer_type ctx b)
 
-and check_type gamma t ty =
-  match infer_type gamma t with tt when tt = ty -> () | _ -> raise Type_error
+and check_type ctx t ty =
+  match infer_type ctx t with tt when tt = ty -> () | _ -> raise Type_error
 
-(*********)
-(* TESTS *)
-(*********)
+(*********************************)
+(* TOWARDS AN INTERACTIVE PROVER *)
+(*********************************)
+
+let string_of_ctx ctx =
+  String.concat ", " (List.map (fun (x, tx) -> x ^ " : " ^ string_of_ty tx) ctx)
+
+type sequent = context * ty
+
+let string_of_seq (ctx, tx) = string_of_ctx ctx ^ " |- " ^ string_of_ty tx
+
+(***************)
+(* FIRST TESTS *)
+(***************)
 
 let () =
   let test_type = TAbs (TAbs (TVar "A", TVar "B"), TAbs (TVar "A", TVar "C")) in
@@ -181,13 +188,13 @@ let () =
   print_endline (string_of_ty (infer_type [] or_comm))
 
 let () =
-  let non_contrad =
+  let expl =
     Abs
       ( "f",
         TProd (TVar "A", TAbs (TVar "A", TEmpty)),
         Empty (App (Snd (Var "f"), Fst (Var "f")), TVar "B") )
   in
-  print_endline (string_of_ty (infer_type [] non_contrad))
+  print_endline (string_of_ty (infer_type [] expl))
 
 (****************)
 (* PARSING TEST *)
@@ -234,3 +241,22 @@ let () =
       Printf.printf "the parsing of \"%s\" is %s\n%!" s
         (string_of_tm (tm_of_string s)))
     l
+
+(*********************)
+(* INTERACTIVE TESTS *)
+(*********************)
+
+let () =
+  let ctx =
+    [
+      ("x", TAbs (TVar "A", TVar "B"));
+      ("y", TProd (TVar "A", TVar "B"));
+      ("Z", TVar "T");
+    ]
+  in
+  print_endline (string_of_ctx ctx)
+
+let () =
+  let ctx = [ ("x", TAbs (TVar "A", TVar "B")); ("y", TVar "A") ] in
+  let seq = (ctx, TVar "B") in
+  print_endline (string_of_seq seq)
