@@ -38,30 +38,28 @@ type context = (var * ty) list
 
 exception Type_error
 
-let rec infer_type' gamma t =
+let rec infer_type gamma t =
   match t with
   | Var x -> ( try List.assoc x gamma with Not_found -> raise Type_error)
   | App (u, v) -> (
-      let tu = infer_type' gamma u in
-      let tv = infer_type' gamma v in
-      match tu with TAbs (ta, tb) when ta = tv -> tb | _ -> raise Type_error)
-  | Abs (x, tx, u) ->
-      let tu = infer_type' ((x, tx) :: gamma) u in
-      TAbs (tx, tu)
-  | Prod (u, v) -> TProd (infer_type' gamma u, infer_type' gamma v)
+      match infer_type gamma u with
+      | TAbs (tu, turet) ->
+          check_type gamma v tu;
+          turet
+      | _ -> raise Type_error)
+  | Abs (x, tx, u) -> TAbs (tx, infer_type ((x, tx) :: gamma) u)
+  | Prod (u, v) -> TProd (infer_type gamma u, infer_type gamma v)
   | Fst u -> (
-      match infer_type' gamma u with
+      match infer_type gamma u with
       | TProd (tu, _) -> tu
       | _ -> raise Type_error)
   | Snd u -> (
-      match infer_type' gamma u with
+      match infer_type gamma u with
       | TProd (_, tu) -> tu
       | _ -> raise Type_error)
 
-let check_type' gamma t ty =
-  match infer_type' gamma t with tt when tt = ty -> () | _ -> raise Type_error
-
-(* TODO : MUTUALLY RECURSIVE DEFINITIONS *)
+and check_type gamma t ty =
+  match infer_type gamma t with tt when tt = ty -> () | _ -> raise Type_error
 
 (*********)
 (* TESTS *)
@@ -97,19 +95,19 @@ let () =
       ( TAbs (TVar "A", TVar "B"),
         TAbs (TAbs (TVar "B", TVar "C"), TAbs (TVar "A", TVar "C")) )
   in
-  assert (infer_type' [] t = ty)
+  assert (infer_type [] t = ty)
 
 let () =
   let t = Abs ("f", TVar "A", Var "x") in
   try
-    let _ = infer_type' [] t in
+    let _ = infer_type [] t in
     assert false
   with Type_error -> ()
 
 let () =
   let t = Abs ("f", TVar "A", Abs ("x", TVar "B", App (Var "f", Var "x"))) in
   try
-    let _ = infer_type' [] t in
+    let _ = infer_type [] t in
     assert false
   with Type_error -> ()
 
@@ -121,25 +119,25 @@ let () =
         Abs ("x", TVar "B", App (Var "f", Var "x")) )
   in
   try
-    let _ = infer_type' [] t in
+    let _ = infer_type [] t in
     assert false
   with Type_error -> ()
 
 let () =
   let t = Abs ("x", TVar "A", Var "x") in
   let ty = TAbs (TVar "A", TVar "A") in
-  check_type' [] t ty
+  check_type [] t ty
 
 let () =
   let t = Abs ("x", TVar "A", Var "x") in
   let ty = TAbs (TVar "B", TVar "B") in
   try
-    let _ = check_type' [] t ty in
+    let _ = check_type [] t ty in
     assert false
   with Type_error -> ()
 
 let () =
   try
-    let _ = check_type' [] (Var "x") (TVar "A") in
+    let _ = check_type [] (Var "x") (TVar "A") in
     assert false
   with Type_error -> ()
