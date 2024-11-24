@@ -1,33 +1,9 @@
 let () = Printexc.record_backtrace true
 
-(* Type variables *)
-type tvar = string
+open Expr
 
-(* Term variables *)
-type var = string
-
-(* Types *)
-type ty =
-  | TUnit
-  | TEmpty
-  | TVar of tvar
-  | TAbs of ty * ty
-  | TProd of ty * ty
-  | TCoprod of ty * ty
-
-(* Terms *)
-type tm =
-  | Unit
-  | Empty of tm * ty
-  | Var of var
-  | App of tm * tm
-  | Abs of var * ty * tm
-  | Prod of tm * tm
-  | Fst of tm
-  | Snd of tm
-  | Coprod of tm * var * tm * var * tm
-  | Left of tm * ty
-  | Right of tm * ty
+let ty_of_string s = Parser.ty Lexer.token (Lexing.from_string s)
+let tm_of_string s = Parser.tm Lexer.token (Lexing.from_string s)
 
 let rec string_of_ty t =
   match t with
@@ -53,7 +29,7 @@ let rec string_of_tm t =
       "case (" ^ string_of_tm t ^ ", " ^ x ^ " => " ^ string_of_tm u ^ ", " ^ y
       ^ " => " ^ string_of_tm v ^ ")"
   | Left (a, tb) -> "left^(" ^ string_of_ty tb ^ ") (" ^ string_of_tm a ^ ")"
-  | Right (b, ta) -> "right^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm b ^ ")"
+  | Right (ta, b) -> "right^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm b ^ ")"
 
 type context = (var * ty) list
 
@@ -90,7 +66,7 @@ let rec infer_type gamma t =
           if tu = tv then tu else raise Type_error
       | _ -> raise Type_error)
   | Left (a, tb) -> TCoprod (infer_type gamma a, tb)
-  | Right (b, ta) -> TCoprod (ta, infer_type gamma b)
+  | Right (ta, b) -> TCoprod (ta, infer_type gamma b)
 
 and check_type gamma t ty =
   match infer_type gamma t with tt when tt = ty -> () | _ -> raise Type_error
@@ -198,7 +174,7 @@ let () =
         Coprod
           ( Var "o",
             "x",
-            Right (Var "x", TVar "B"),
+            Right (TVar "B", Var "x"),
             "y",
             Left (Var "y", TVar "A") ) )
   in
