@@ -9,6 +9,7 @@ type var = string
 (* Types *)
 type ty =
   | TUnit
+  | TEmpty
   | TVar of tvar
   | TAbs of ty * ty
   | TProd of ty * ty
@@ -17,6 +18,7 @@ type ty =
 (* Terms *)
 type tm =
   | Unit
+  | Empty of tm * ty
   | Var of var
   | App of tm * tm
   | Abs of var * ty * tm
@@ -30,6 +32,7 @@ type tm =
 let rec string_of_ty t =
   match t with
   | TUnit -> "unit"
+  | TEmpty -> "empty"
   | TVar x -> x
   | TAbs (u, v) -> "(" ^ string_of_ty u ^ " => " ^ string_of_ty v ^ ")"
   | TProd (u, v) -> "(" ^ string_of_ty u ^ " /\\ " ^ string_of_ty v ^ ")"
@@ -38,6 +41,7 @@ let rec string_of_ty t =
 let rec string_of_tm t =
   match t with
   | Unit -> "()"
+  | Empty (u, ta) -> "case^(" ^ string_of_ty ta ^ ") (" ^ string_of_tm u ^ ")"
   | Var x -> x
   | App (u, v) -> string_of_tm u ^ " " ^ string_of_tm v
   | Abs (x, tx, u) ->
@@ -58,6 +62,9 @@ exception Type_error
 let rec infer_type gamma t =
   match t with
   | Unit -> TUnit
+  | Empty (u, ta) ->
+      check_type gamma u TEmpty;
+      ta
   | Var x -> ( try List.assoc x gamma with Not_found -> raise Type_error)
   | App (u, v) -> (
       match infer_type gamma u with
@@ -196,3 +203,12 @@ let () =
             Left (Var "y", TVar "A") ) )
   in
   print_endline (string_of_ty (infer_type [] or_comm))
+
+let () =
+  let non_contrad =
+    Abs
+      ( "f",
+        TProd (TVar "A", TAbs (TVar "A", TEmpty)),
+        Empty (App (Snd (Var "f"), Fst (Var "f")), TVar "B") )
+  in
+  print_endline (string_of_ty (infer_type [] non_contrad))
