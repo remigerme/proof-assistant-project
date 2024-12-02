@@ -110,6 +110,18 @@ let rec prove env a =
   | "exact" ->
       let t = tm_of_string arg in
       if infer_type env t <> a then error "Not the right type." else t
+  | "elim" -> (
+      if arg = "" then error "Please provide an argument for elim."
+      else
+        let t = tm_of_string arg in
+        try
+          let tt = infer_type env t in
+          match tt with
+          | TAbs (x, b) when a = b ->
+              let u = prove env x in
+              App (t, u)
+          | _ -> error "Don't know how to elim using the given term."
+        with Type_error -> error "This term does not exist. Couldn't elim.")
   | cmd -> error ("Unknown command: " ^ cmd)
 
 let () =
