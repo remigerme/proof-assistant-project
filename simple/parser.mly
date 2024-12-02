@@ -29,6 +29,7 @@ ty:
   | NOT ty    { TAbs ($2, TEmpty) }
   | TRUE      { TUnit }
   | FALSE     { TEmpty }
+  | LPAR ty RPAR { $2 }
 
 /* A term */
 tm:
