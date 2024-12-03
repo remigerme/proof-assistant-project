@@ -111,6 +111,7 @@ let rec prove env a =
           let t = prove env a in
           let u = prove env b in
           Prod (t, u)
+      | TUnit -> Unit
       | _ -> error "Don't know how to introduce this.")
   | "exact" ->
       if arg = "" then error "Please provide an argument for exact."
