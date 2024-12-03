@@ -121,13 +121,16 @@ let rec prove env a =
   | "elim" -> (
       if arg = "" then error "Please provide an argument for elim."
       else
-        let t = tm_of_string arg in
+        let x = arg in
         try
-          let tt = infer_type env t in
-          match tt with
-          | TAbs (x, b) when a = b ->
-              let u = prove env x in
-              App (t, u)
+          match infer_type env (Var x) with
+          | TAbs (y, b) when a = b ->
+              let t = prove env y in
+              App (Var x, t)
+          | TCoprod (b, c) ->
+              let t = prove ((x, b) :: env) a in
+              let u = prove ((x, c) :: env) a in
+              Coprod (Var x, x, t, x, u)
           | _ -> error "Don't know how to elim using the given term."
         with Type_error -> error "This term does not exist. Couldn't elim.")
   | "cut" ->
@@ -155,6 +158,18 @@ let rec prove env a =
           | TProd (_, b) -> if a = b then Snd x else error "Wrong type."
           | _ -> error "Don't know how to use snd on the given variable."
         with Type_error -> error "This variable does not exist. Couldn't snd.")
+  | "left" -> (
+      match a with
+      | TCoprod (b, c) ->
+          let t = prove env b in
+          Left (t, c)
+      | _ -> error "Don't know how to left on the current goal.")
+  | "right" -> (
+      match a with
+      | TCoprod (b, c) ->
+          let t = prove env c in
+          Right (b, t)
+      | _ -> error "Don't know how to right on the current goal.")
   | cmd -> error ("Unknown command: " ^ cmd)
 
 let () =
