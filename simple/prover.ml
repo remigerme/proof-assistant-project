@@ -97,6 +97,7 @@ let rec prove env a =
     let a = String.trim a in
     (c, a)
   in
+  (* TODO : save cmds in a file *)
   match cmd with
   | "intro" -> (
       match a with
@@ -108,8 +109,10 @@ let rec prove env a =
             Abs (x, a, t)
       | _ -> error "Don't know how to introduce this.")
   | "exact" ->
-      let t = tm_of_string arg in
-      if infer_type env t <> a then error "Not the right type." else t
+      if arg = "" then error "Please provide an argument for exact."
+      else
+        let t = tm_of_string arg in
+        if infer_type env t <> a then error "Not the right type." else t
   | "elim" -> (
       if arg = "" then error "Please provide an argument for elim."
       else
@@ -122,6 +125,13 @@ let rec prove env a =
               App (t, u)
           | _ -> error "Don't know how to elim using the given term."
         with Type_error -> error "This term does not exist. Couldn't elim.")
+  | "cut" ->
+      if arg = "" then error "Please provide an argument for cut."
+      else
+        let tc = ty_of_string arg in
+        let t = prove env (TAbs (tc, a)) in
+        let u = prove env tc in
+        App (t, u)
   | cmd -> error ("Unknown command: " ^ cmd)
 
 let () =
