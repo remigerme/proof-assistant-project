@@ -107,6 +107,10 @@ let rec prove env a =
             let x = arg in
             let t = prove ((x, a) :: env) b in
             Abs (x, a, t)
+      | TProd (a, b) ->
+          let t = prove env a in
+          let u = prove env b in
+          Prod (t, u)
       | _ -> error "Don't know how to introduce this.")
   | "exact" ->
       if arg = "" then error "Please provide an argument for exact."
@@ -132,6 +136,24 @@ let rec prove env a =
         let t = prove env (TAbs (tc, a)) in
         let u = prove env tc in
         App (t, u)
+  | "fst" -> (
+      if arg = "" then error "Please provide an argument for fst."
+      else
+        let x = Var arg in
+        try
+          match infer_type env x with
+          | TProd (b, _) -> if a = b then Fst x else error "Wrong type."
+          | _ -> error "Don't know how to use fst on the given variable."
+        with Type_error -> error "This variable does not exist. Couldn't fst.")
+  | "snd" -> (
+      if arg = "" then error "Please provide an argument for snd."
+      else
+        let x = Var arg in
+        try
+          match infer_type env x with
+          | TProd (_, b) -> if a = b then Snd x else error "Wrong type."
+          | _ -> error "Don't know how to use snd on the given variable."
+        with Type_error -> error "This variable does not exist. Couldn't snd.")
   | cmd -> error ("Unknown command: " ^ cmd)
 
 let () =
