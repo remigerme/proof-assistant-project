@@ -131,6 +131,7 @@ let rec prove env a =
               let t = prove ((x, b) :: env) a in
               let u = prove ((x, c) :: env) a in
               Coprod (Var x, x, t, x, u)
+          | TEmpty -> Empty (Var x, a)
           | _ -> error "Don't know how to elim using the given term."
         with Type_error -> error "This term does not exist. Couldn't elim.")
   | "cut" ->
