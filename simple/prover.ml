@@ -127,6 +127,12 @@ let rec prove env a =
           let u = prove env b in
           Prod (t, u)
       | TUnit -> Unit
+      | Nat ->
+          if arg = "zero" then Zero
+          else if arg = "suc" then
+            let t = prove env Nat in
+            Suc t
+          else error "Please provide an argument for intro (zero or suc)."
       | _ -> error "Don't know how to introduce this.")
   | "exact" ->
       if arg = "" then error "Please provide an argument for exact."
