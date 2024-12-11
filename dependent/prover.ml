@@ -95,3 +95,25 @@ let rec red ctx e =
 
 let rec normalize ctx e =
   match red ctx e with None -> e | Some u -> normalize ctx u
+
+let rec alpha t t' =
+  match (t, t') with
+  | Type, Type -> true
+  | Var x, Var y when x = y -> true
+  | App (u, v), App (u', v') -> alpha u u' && alpha v v'
+  | Abs (x, tx, u), Abs (y, ty, v) ->
+      let z = fresh_var () in
+      let u' = subst x u (Var z) in
+      let v' = subst y v (Var z) in
+      alpha tx ty && alpha u' v'
+  | Pi (x, a, b), Pi (y, c, d) ->
+      let z = fresh_var () in
+      let b' = subst x b (Var z) in
+      let d' = subst y d (Var z) in
+      alpha a c && alpha b' d'
+  | _ -> false
+
+let conv ctx t u =
+  let t' = normalize ctx t in
+  let u' = normalize ctx u in
+  alpha t' u'
