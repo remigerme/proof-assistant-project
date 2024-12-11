@@ -117,3 +117,34 @@ let conv ctx t u =
   let t' = normalize ctx t in
   let u' = normalize ctx u in
   alpha t' u'
+
+exception Type_error of string
+
+let rec infer ctx e =
+  match e with
+  | Type -> Type
+  | Var x -> (
+      match List.assoc_opt x ctx with
+      | Some (t, _) -> t
+      | None -> raise (Type_error ("Unkown type for variable " ^ x)))
+  | App (u, v) -> (
+      let tu = infer ctx u in
+      let tv = infer ctx v in
+      match tu with
+      | Abs (x, tx, w) when tx = tv -> infer ((x, (tx, None)) :: ctx) w
+      | _ ->
+          raise
+            (Type_error
+               ("Term of type " ^ to_string tv ^ "is applied to term of type "
+              ^ to_string tu)))
+  | Abs (x, tx, u) -> Pi (x, tx, infer ((x, (tx, None)) :: ctx) u)
+  | Pi (_, _, _) -> Type
+  | _ -> raise (Type_error "Not implemented yet")
+
+let check ctx e t =
+  let it = infer ctx e in
+  if it <> t then
+    raise
+      (Type_error
+         ("Inferred type ( " ^ to_string it ^ ") doesn't match expected type ("
+        ^ to_string t ^ ")."))
