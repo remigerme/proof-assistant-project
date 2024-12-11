@@ -6,6 +6,7 @@ open Expr
 %token FUN TO CASE OF
 %token LPAR RPAR COLON COMMA BAR
 %token FST SND LEFT RIGHT ABSURD
+%token NAT ZERO SUC REC
 %token <string> IDENT
 %token EOF
 
@@ -22,13 +23,14 @@ open Expr
 
 /* A type */
 ty:
-  | IDENT     { TVar $1 }
-  | ty IMP ty { TAbs ($1, $3) }
-  | ty AND ty { TProd ($1, $3) }
-  | ty OR ty  { TCoprod ($1, $3) }
-  | NOT ty    { TAbs ($2, TEmpty) }
-  | TRUE      { TUnit }
-  | FALSE     { TEmpty }
+  | IDENT        { TVar $1 }
+  | ty IMP ty    { TAbs ($1, $3) }
+  | ty AND ty    { TProd ($1, $3) }
+  | ty OR ty     { TCoprod ($1, $3) }
+  | NOT ty       { TAbs ($2, TEmpty) }
+  | TRUE         { TUnit }
+  | FALSE        { TEmpty }
+  | NAT          { Nat }
   | LPAR ty RPAR { $2 }
 
 /* A term */
@@ -53,3 +55,6 @@ stm:
   | LEFT LPAR tm COMMA ty RPAR   { Left ($3, $5) }
   | RIGHT LPAR ty COMMA tm RPAR  { Right ($3, $5) }
   | ABSURD LPAR tm COMMA ty RPAR { Empty ($3, $5) }
+  | ZERO                         { Zero }
+  | SUC tm                       { Suc $2 }
+  | REC LPAR tm COMMA tm COMMA IDENT IDENT TO tm RPAR { Rec ($3, $5, $7, $8, $10) }

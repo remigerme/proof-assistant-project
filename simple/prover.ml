@@ -16,6 +16,7 @@ let rec string_of_ty t =
   | TAbs (u, v) -> "(" ^ string_of_ty u ^ " => " ^ string_of_ty v ^ ")"
   | TProd (u, v) -> "(" ^ string_of_ty u ^ " /\\ " ^ string_of_ty v ^ ")"
   | TCoprod (u, v) -> "(" ^ string_of_ty u ^ " \\/ " ^ string_of_ty v ^ ")"
+  | Nat -> "N"
 
 let rec string_of_tm t =
   match t with
@@ -33,6 +34,11 @@ let rec string_of_tm t =
       ^ y ^ " -> " ^ string_of_tm v
   | Left (a, tb) -> "left(" ^ string_of_tm a ^ ", " ^ string_of_ty tb ^ ")"
   | Right (ta, b) -> "right(" ^ string_of_ty ta ^ ", " ^ string_of_tm b ^ ")"
+  | Zero -> "zero"
+  | Suc n -> "suc(" ^ string_of_tm n ^ ")"
+  | Rec (t, u, x, y, v) ->
+      "rec(" ^ string_of_tm t ^ ", " ^ string_of_tm u ^ ", " ^ x ^ ", " ^ y
+      ^ ", " ^ string_of_tm v ^ ")"
 
 type context = (var * ty) list
 
@@ -66,6 +72,15 @@ let rec infer_type ctx t =
       | _ -> raise Type_error)
   | Left (a, tb) -> TCoprod (infer_type ctx a, tb)
   | Right (ta, b) -> TCoprod (ta, infer_type ctx b)
+  | Zero -> Nat
+  | Suc n ->
+      check_type ctx n Nat;
+      Nat
+  | Rec (t, u, x, y, v) ->
+      check_type ctx t Nat;
+      let tu = infer_type ctx u in
+      check_type ((x, Nat) :: (y, tu) :: ctx) v tu;
+      tu
 
 and check_type ctx t ty =
   match infer_type ctx t with tt when tt = ty -> () | _ -> raise Type_error

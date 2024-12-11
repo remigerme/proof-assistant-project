@@ -12,6 +12,7 @@ type ty =
   | TAbs of ty * ty
   | TProd of ty * ty
   | TCoprod of ty * ty
+  | Nat
 
 (* Terms *)
 type tm =
@@ -26,3 +27,6 @@ type tm =
   | Coprod of tm * var * tm * var * tm
   | Left of tm * ty
   | Right of ty * tm
+  | Zero
+  | Suc of tm
+  | Rec of tm * tm * var * var * tm
