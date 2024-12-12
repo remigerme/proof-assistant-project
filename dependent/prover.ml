@@ -8,10 +8,16 @@ let rec to_string e =
   match e with
   | Type -> "type"
   | Var x -> x
-  | App (u, v) -> to_string u ^ " " ^ to_string v
+  | App (u, v) -> "(" ^ to_string u ^ " " ^ to_string v ^ ")"
   | Abs (x, t, u) ->
       "(fun (" ^ x ^ " : " ^ to_string t ^ ") -> " ^ to_string u ^ ")"
   | Pi (x, a, b) -> "((" ^ x ^ " : " ^ to_string a ^ ") -> " ^ to_string b ^ ")"
+  | Nat -> "N"
+  | Z -> "Z"
+  | S n -> "(S " ^ to_string n ^ ")"
+  | Ind (p, z, s, n) ->
+      "ind(" ^ to_string p ^ ", " ^ to_string z ^ ", " ^ to_string s ^ ", "
+      ^ to_string n ^ ")"
   | _ -> assert false
 
 let n = ref 0
@@ -36,6 +42,10 @@ let rec subst x t u =
       let y' = fresh_var () in
       let b' = subst y (Var y') b in
       Pi (y', subst x t a, subst x t b')
+  | Nat -> Nat
+  | Z -> Z
+  | S n -> S (subst x t n)
+  | Ind (p, z, s, n) -> Ind (subst x t p, subst x t z, subst x t s, subst x t n)
   | _ -> assert false
 
 type context = (var * (expr * expr option)) list
@@ -79,6 +89,17 @@ let rec red ctx e =
       | Some a', None -> Some (Pi (x, a', b))
       | None, Some b' -> Some (Pi (x, a, b'))
       | Some a', Some b' -> Some (Pi (x, a', b')))
+  | Nat -> None
+  | Z -> None
+  | S n -> ( match red ctx n with None -> None | Some n' -> Some (S n'))
+  | Ind (p, z, s, n) -> (
+      match red ctx n with
+      | None -> (
+          match n with
+          | Z -> Some z
+          | S n' -> Some (App (App (s, n'), Ind (p, z, s, n')))
+          | _ -> assert false (* n is not correctly typed *))
+      | Some n' -> Some n')
   | _ -> assert false
 
 let rec normalize ctx e =
@@ -99,6 +120,11 @@ let rec alpha t t' =
       let b' = subst x b (Var z) in
       let d' = subst y d (Var z) in
       alpha a c && alpha b' d'
+  | Nat, Nat -> true
+  | Z, Z -> true
+  | S m, S n -> alpha m n
+  | Ind (p, z, s, n), Ind (p', z', s', n') ->
+      alpha p p' && alpha z z' && alpha s s' && alpha n n'
   | _ -> false
 
 let conv ctx t u =
@@ -127,6 +153,40 @@ let rec infer ctx e =
               ^ to_string tu)))
   | Abs (x, tx, u) -> Pi (x, tx, infer ((x, (tx, None)) :: ctx) u)
   | Pi (_, _, _) -> Type
+  | Nat -> Type
+  | Z -> Nat
+  | S n ->
+      check ctx n Nat;
+      Nat
+  | Ind (p, z, s, n) ->
+      (* Checking type of n *)
+      check ctx n Nat;
+      let tp = infer ctx p in
+      (* Checkinf type of p *)
+      if conv ctx tp (Pi ("", Nat, Type)) then
+        let tz = infer ctx z in
+        let pz = App (p, Z) in
+        (* Checking type of z is p Z *)
+        if conv ctx tz pz then
+          let ts = infer ctx s in
+          match ts with
+          | Pi (n', c, d) when conv ctx c Nat ->
+              if
+                conv
+                  ((n', (Nat, None)) :: ctx)
+                  d
+                  (Pi ("", App (p, Var n'), App (p, S (Var n'))))
+              then normalize ctx (App (p, n))
+              else raise (Type_error ("Wrong type (2) for s : " ^ to_string ts))
+          | _ -> raise (Type_error ("Wrong type (1) for s : " ^ to_string ts))
+        else
+          raise
+            (Type_error
+               ("z should be of type " ^ to_string pz ^ " but is of type "
+              ^ to_string tz))
+      else
+        raise
+          (Type_error ("Invalid type for p which is of type " ^ to_string tp))
   | _ -> raise (Type_error "Not implemented yet")
 
 and check ctx e t =
