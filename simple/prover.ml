@@ -195,18 +195,22 @@ let rec prove env a =
   | cmd -> error ("Unknown command: " ^ cmd)
 
 let () =
-  print_endline "Please enter the formula to prove:";
-  let a = input_line stdin in
-  let a = ty_of_string a in
-  print_endline "Let's prove it.";
-  let t = prove [] a in
-  print_endline "done.";
-  print_endline "Proof term is";
-  print_endline (string_of_tm t);
-  print_string "Typechecking... ";
-  flush_all ();
-  assert (infer_type [] t = a);
-  print_endline "ok."
+  try
+    print_endline "Please enter the formula to prove:";
+    let a = input_line stdin in
+    let a = ty_of_string a in
+    print_endline "Let's prove it.";
+    let t = prove [] a in
+    print_endline "done.";
+    print_endline "Proof term is";
+    print_endline (string_of_tm t);
+    print_string "Typechecking... ";
+    flush_all ();
+    assert (infer_type [] t = a);
+    print_endline "ok."
+  with
+  | End_of_file -> print_endline "Input ended. Please provide a valid formula."
+  | ex -> print_endline ("An error occured : " ^ Printexc.to_string ex)
 
 (***************)
 (* FIRST TESTS *)
