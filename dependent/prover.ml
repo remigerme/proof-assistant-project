@@ -1,22 +1,8 @@
 let () = Printexc.record_backtrace true
 
-type var = string
-(** Variables. *)
+open Expr
 
-(** Expressions. *)
-type expr =
-  | Type
-  | Var of var
-  | App of expr * expr
-  | Abs of var * expr * expr
-  | Pi of var * expr * expr
-  | Nat
-  | Z
-  | S of expr
-  | Ind of expr * expr * expr * expr
-  | Eq of expr * expr
-  | Refl of expr
-  | J of expr * expr * expr * expr * expr
+let of_string s = Parser.expr Lexer.token (Lexing.from_string s)
 
 let rec to_string e =
   match e with
@@ -25,7 +11,7 @@ let rec to_string e =
   | App (u, v) -> to_string u ^ " " ^ to_string v
   | Abs (x, t, u) ->
       "(fun (" ^ x ^ " : " ^ to_string t ^ ") -> " ^ to_string u ^ ")"
-  | Pi (x, a, b) -> "Pi(" ^ x ^ ", " ^ to_string a ^ ", " ^ to_string b ^ ")"
+  | Pi (x, a, b) -> "((" ^ x ^ " : " ^ to_string a ^ ") -> " ^ to_string b ^ ")"
   | _ -> assert false
 
 let n = ref 0
@@ -35,32 +21,33 @@ let fresh_var () =
   incr n;
   x
 
+(** Substitutes x by t in u. *)
 let rec subst x t u =
-  match t with
+  match u with
   | Type -> Type
-  | Var y when y = x -> u
+  | Var y when y = x -> t
   | Var y -> Var y
-  | App (v, w) -> App (subst x v u, subst x w u)
+  | App (v, w) -> App (subst x t v, subst x t w)
   | Abs (y, ty, v) ->
       let y' = fresh_var () in
-      let v' = subst y v (Var y') in
-      Abs (y', ty, subst x v' u)
+      let v' = subst y (Var y') v in
+      Abs (y', subst x t ty, subst x t v')
   | Pi (y, a, b) ->
       let y' = fresh_var () in
-      let b' = subst y b (Var y') in
-      Pi (y', a, subst x b' u)
+      let b' = subst y (Var y') b in
+      Pi (y', subst x t a, subst x t b')
   | _ -> assert false
 
 type context = (var * (expr * expr option)) list
 
 let rec string_of_context ctx =
   match ctx with
-  | [] -> ()
+  | [] -> ""
   | (x, (t, v)) :: l ->
       let st = to_string t in
       let sv = match v with None -> "" | Some v -> " = " ^ to_string v in
-      print_endline (x ^ " : " ^ st ^ sv);
-      string_of_context l
+      let endline = if List.length l > 0 then "\n" else "" in
+      x ^ " : " ^ st ^ sv ^ endline ^ string_of_context l
 
 (* We assume these functions are only called with well-typed expressions. *)
 
@@ -73,6 +60,7 @@ let rec red ctx e =
       | None -> None
       | Some (_, None) -> None
       | Some (_, Some v) -> Some v)
+  | App (Abs (x, _, u), t) -> Some (subst x t u)
   | App (u, v) -> (
       match (red ctx u, red ctx v) with
       | None, None -> None
@@ -131,20 +119,82 @@ let rec infer ctx e =
       let tu = infer ctx u in
       let tv = infer ctx v in
       match tu with
-      | Abs (x, tx, w) when tx = tv -> infer ((x, (tx, None)) :: ctx) w
+      | Pi (x, tx, w) when conv ctx tx tv -> subst x v w
       | _ ->
           raise
             (Type_error
-               ("Term of type " ^ to_string tv ^ "is applied to term of type "
+               ("Term of type " ^ to_string tv ^ " is applied to term of type "
               ^ to_string tu)))
   | Abs (x, tx, u) -> Pi (x, tx, infer ((x, (tx, None)) :: ctx) u)
   | Pi (_, _, _) -> Type
   | _ -> raise (Type_error "Not implemented yet")
 
-let check ctx e t =
+and check ctx e t =
   let it = infer ctx e in
   if it <> t then
     raise
       (Type_error
          ("Inferred type ( " ^ to_string it ^ ") doesn't match expected type ("
         ^ to_string t ^ ")."))
+
+(** Interactive loop *)
+let () =
+  let env = ref [] in
+  let loop = ref true in
+  let file = open_out "interactive.proof" in
+  let split c s =
+    try
+      let n = String.index s c in
+      ( String.trim (String.sub s 0 n),
+        String.trim (String.sub s (n + 1) (String.length s - (n + 1))) )
+    with Not_found -> (s, "")
+  in
+  while !loop do
+    try
+      print_string "? ";
+      flush_all ();
+      let cmd, arg =
+        let cmd = input_line stdin in
+        output_string file (cmd ^ "\n");
+        print_endline cmd;
+        split ' ' cmd
+      in
+      match cmd with
+      | "assume" ->
+          let x, sa = split ':' arg in
+          let a = of_string sa in
+          check !env a Type;
+          env := (x, (a, None)) :: !env;
+          print_endline (x ^ " assumed of type " ^ to_string a)
+      | "define" ->
+          let x, st = split '=' arg in
+          let t = of_string st in
+          let a = infer !env t in
+          env := (x, (a, Some t)) :: !env;
+          print_endline
+            (x ^ " defined to " ^ to_string t ^ " of type " ^ to_string a)
+      | "context" -> print_endline (string_of_context !env)
+      | "type" ->
+          let t = of_string arg in
+          let a = infer !env t in
+          print_endline (to_string t ^ " is of type " ^ to_string a)
+      | "check" ->
+          let t, a = split '=' arg in
+          let t = of_string t in
+          let a = of_string a in
+          check !env t a;
+          print_endline "Ok."
+      | "eval" ->
+          let t = of_string arg in
+          let _ = infer !env t in
+          print_endline (to_string (normalize !env t))
+      | "exit" -> loop := false
+      | "" | "#" -> ()
+      | cmd -> print_endline ("Unknown command: " ^ cmd)
+    with
+    | End_of_file -> loop := false
+    | Failure err -> print_endline ("Error: " ^ err ^ ".")
+    | Type_error err -> print_endline ("Typing error :" ^ err ^ ".")
+    | Parsing.Parse_error -> print_endline "Parsing error."
+  done;
+  print_endline "Bye."
