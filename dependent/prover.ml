@@ -16,9 +16,13 @@ let rec to_string e =
   | Z -> "Z"
   | S n -> "(S " ^ to_string n ^ ")"
   | Ind (p, z, s, n) ->
-      "ind(" ^ to_string p ^ ", " ^ to_string z ^ ", " ^ to_string s ^ ", "
+      "(Ind " ^ to_string p ^ " " ^ to_string z ^ " " ^ to_string s ^ " "
       ^ to_string n ^ ")"
-  | _ -> assert false
+  | Eq (t, u) -> "(" ^ to_string t ^ " = " ^ to_string u ^ ")"
+  | Refl t -> "(refl " ^ to_string t ^ ")"
+  | J (p, r, x, y, e) ->
+      "(J " ^ to_string p ^ " " ^ to_string r ^ " " ^ to_string x ^ " "
+      ^ to_string y ^ " " ^ to_string e ^ ")"
 
 let n = ref 0
 
@@ -46,7 +50,10 @@ let rec subst x t u =
   | Z -> Z
   | S n -> S (subst x t n)
   | Ind (p, z, s, n) -> Ind (subst x t p, subst x t z, subst x t s, subst x t n)
-  | _ -> assert false
+  | Eq (v, w) -> Eq (subst x t v, subst x t w)
+  | Refl v -> Refl (subst x t v)
+  | J (p, r, y, y', e) ->
+      J (subst x t p, subst x t r, subst x t y, subst x t y', subst x t e)
 
 type context = (var * (expr * expr option)) list
 
@@ -100,7 +107,22 @@ let rec red ctx e =
           | S n' -> Some (App (App (s, n'), Ind (p, z, s, n')))
           | _ -> assert false (* n is not correctly typed *))
       | Some n' -> Some n')
-  | _ -> assert false
+  | Eq (t, u) -> (
+      match (red ctx t, red ctx u) with
+      | None, None -> None
+      | Some t', None -> Some (Eq (t', u))
+      | None, Some u' -> Some (Eq (t, u'))
+      | Some t', Some u' -> Some (Eq (t', u')))
+  | Refl t -> ( match red ctx t with None -> None | Some t' -> Some (Refl t'))
+  | J (_, r, x, y, e) when x = y && e = Refl x -> Some (App (r, x))
+  | J (p, r, x, y, e) -> (
+      match (red ctx p, red ctx r, red ctx x, red ctx y, red ctx e) with
+      | None, None, None, None, None -> None
+      | Some p', _, _, _, _ -> Some (J (p', r, x, y, e))
+      | _, Some r', _, _, _ -> Some (J (p, r', x, y, e))
+      | _, _, Some x', _, _ -> Some (J (p, r, x', y, e))
+      | _, _, _, Some y', _ -> Some (J (p, r, x, y', e))
+      | _, _, _, _, Some e' -> Some (J (p, r, x, y, e')))
 
 let rec normalize ctx e =
   match red ctx e with None -> e | Some u -> normalize ctx u
@@ -125,6 +147,10 @@ let rec alpha t t' =
   | S m, S n -> alpha m n
   | Ind (p, z, s, n), Ind (p', z', s', n') ->
       alpha p p' && alpha z z' && alpha s s' && alpha n n'
+  | Eq (t, u), Eq (t', u') -> alpha t t' && alpha u u'
+  | Refl t, Refl t' -> alpha t t'
+  | J (p, r, x, y, e), J (p', r', x', y', e') ->
+      alpha p p' && alpha r r' && alpha x x' && alpha y y' && alpha e e'
   | _ -> false
 
 let conv ctx t u =
@@ -134,23 +160,25 @@ let conv ctx t u =
 
 exception Type_error of string
 
+(** Utils for readability *)
+let err s = raise (Type_error s)
+
 let rec infer ctx e =
   match e with
   | Type -> Type
   | Var x -> (
       match List.assoc_opt x ctx with
       | Some (t, _) -> t
-      | None -> raise (Type_error ("Unkown type for variable " ^ x)))
+      | None -> err ("Unkown type for variable " ^ x))
   | App (u, v) -> (
       let tu = infer ctx u in
       let tv = infer ctx v in
       match tu with
       | Pi (x, tx, w) when conv ctx tx tv -> subst x v w
       | _ ->
-          raise
-            (Type_error
-               ("Term of type " ^ to_string tv ^ " is applied to term of type "
-              ^ to_string tu)))
+          err
+            ("Term of type " ^ to_string tv ^ " is applied to term of type "
+           ^ to_string tu))
   | Abs (x, tx, u) -> Pi (x, tx, infer ((x, (tx, None)) :: ctx) u)
   | Pi (_, _, _) -> Type
   | Nat -> Type
@@ -177,17 +205,55 @@ let rec infer ctx e =
                   d
                   (Pi ("", App (p, Var n'), App (p, S (Var n'))))
               then normalize ctx (App (p, n))
-              else raise (Type_error ("Wrong type (2) for s : " ^ to_string ts))
-          | _ -> raise (Type_error ("Wrong type (1) for s : " ^ to_string ts))
+              else err ("Wrong type (2) for s : " ^ to_string ts)
+          | _ -> err ("Wrong type (1) for s : " ^ to_string ts)
         else
-          raise
-            (Type_error
-               ("z should be of type " ^ to_string pz ^ " but is of type "
-              ^ to_string tz))
-      else
-        raise
-          (Type_error ("Invalid type for p which is of type " ^ to_string tp))
-  | _ -> raise (Type_error "Not implemented yet")
+          err
+            ("z should be of type " ^ to_string pz ^ " but is of type "
+           ^ to_string tz)
+      else err ("Invalid type for p which is of type " ^ to_string tp)
+  | Eq (_, _) -> Type
+  | Refl t -> Eq (t, t)
+  | J (p, r, x, y, e) -> (
+      (* Checking type of p (1) *)
+      let tp = infer ctx p in
+      match tp with
+      | Pi (a, tx, w) -> (
+          (match w with
+          | Pi (b, tx', z) ->
+              if conv ctx tx tx' then
+                if
+                  conv
+                    ((b, (tx', None)) :: (a, (tx, None)) :: ctx)
+                    z
+                    (Pi ("", Eq (Var a, Var b), Type))
+                then () (* Type of p is fine *)
+                else err ("Invalid type for p (4) : " ^ to_string z)
+              else
+                err ("Invalid type for p (3) : " ^ to_string tx ^ to_string tx')
+          | _ -> err ("Invalid type for p (2) : " ^ to_string w));
+          (* Checking type of x and y *)
+          check ctx x tx;
+          check ctx y tx;
+          (* Checking type of r *)
+          let tr = infer ctx r in
+          match tr with
+          | Pi (x', tx', ro) ->
+              if conv ctx tx tx' then
+                let eval_refl =
+                  App (App (App (p, Var x'), Var x'), Refl (Var x'))
+                in
+                if conv ((x', (tx, None)) :: ctx) ro eval_refl then
+                  (* Checking type of e *)
+                  let te = infer ctx e in
+                  if conv ctx (Eq (x, y)) te then
+                    (* Fiuh, everything's fine ! *)
+                    normalize ctx (App (App (App (p, x), y), e))
+                  else err ("Invalid type for e : " ^ to_string te)
+                else err ("Invalid return type for r : " ^ to_string ro)
+              else err ("Invalid input type for r : " ^ to_string tx')
+          | _ -> err ("Invalid type for r : " ^ to_string tr))
+      | _ -> err ("Invalid type for p (1) : " ^ to_string tp))
 
 and check ctx e t =
   let it = infer ctx e in
