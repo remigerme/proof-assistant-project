@@ -3,3 +3,4 @@ report/report.pdf
 *~
 *.cmi
 *.cmo
+dependent/interactive.proof
