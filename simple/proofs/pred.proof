@@ -1,0 +1,5 @@
+Nat => Nat 
+intro n
+elim n
+exact zero
+exact nrec

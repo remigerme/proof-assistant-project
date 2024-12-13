@@ -153,6 +153,12 @@ let rec prove env a =
               let u = prove ((x, c) :: env) a in
               Coprod (Var x, x, t, x, u)
           | TEmpty -> Empty (Var x, a)
+          | Nat ->
+              print_endline "base case : ";
+              let t = prove env a in
+              print_endline "rec case : ";
+              let u = prove (("prec", a) :: ("nrec", Nat) :: env) a in
+              Rec (Var x, t, "nrec", "prec", u)
           | _ -> error "Don't know how to elim using the given term."
         with Type_error -> error "This term does not exist. Couldn't elim.")
   | "cut" ->
