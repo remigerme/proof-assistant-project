@@ -105,7 +105,7 @@ let rec red ctx e =
           match n with
           | Z -> Some z
           | S n' -> Some (App (App (s, n'), Ind (p, z, s, n')))
-          | _ -> assert false (* n is not correctly typed *))
+          | _ -> None)
       | Some n' -> Some n')
   | Eq (t, u) -> (
       match (red ctx t, red ctx u) with
@@ -257,10 +257,10 @@ let rec infer ctx e =
 
 and check ctx e t =
   let it = infer ctx e in
-  if it <> t then
+  if not (conv ctx it t) then
     raise
       (Type_error
-         ("Inferred type ( " ^ to_string it ^ ") doesn't match expected type ("
+         ("Inferred type (" ^ to_string it ^ ") doesn't match expected type ("
         ^ to_string t ^ ")."))
 
 (** Interactive loop *)
