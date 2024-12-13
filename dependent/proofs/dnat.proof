@@ -3,4 +3,10 @@ eval pred Z
 eval pred (S (S (S Z)))
 define add = fun (m : Nat) -> (fun (n : Nat) -> Ind (fun (a : Nat) -> Nat) m (fun (b : Nat) -> (fun (c : Nat) -> S c)) n)
 eval add (S (S (S Z))) (S (S Z))
+define Seq = fun (x : Nat) -> fun (y : Nat) -> fun (e : x = y) -> J (fun (a : Nat) -> fun (b : Nat) -> fun (f : a = b) -> S a = S b) (fun (a : Nat) -> Refl (S a)) x y e
+check Seq = Pi (x : Nat) -> Pi (y : Nat) -> Pi (e : x = y) -> S x = S y
+define zadd = fun (n : Nat) -> Refl (add Z n)
+check zadd = Pi (n : Nat) -> add Z n = n
+define addz = fun (n : Nat) -> Ind (fun (a : Nat) -> add a Z = a) (Refl Z) (fun (b : Nat) -> fun (e : add b Z = b) -> Seq (add b Z) b e) n
+check addz = Pi (n : Nat) -> add n Z = n
 exit
