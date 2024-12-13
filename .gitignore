@@ -1,6 +1,6 @@
 _build
-report/report.pdf
 *~
 *.cmi
 *.cmo
 dependent/interactive.proof
+.vscode
